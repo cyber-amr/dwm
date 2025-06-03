@@ -1,0 +1,9 @@
+# generated files
+/config.h
+/dwm
+
+# backup files
+.orig
+
+# Object files
+*.o

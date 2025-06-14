@@ -383,7 +383,11 @@ static void get_cpu_usage(char *out, size_t size) {
 static void get_datetime(char *out, size_t size) {
 	time_t t = time(NULL);
 	struct tm *tm = localtime(&t);
-	snprintf(out, size, "%02d:%02d", tm->tm_hour, tm->tm_min);
+	int hour = tm->tm_hour;
+	const char *ampm = (hour >= 12) ? "PM" : "AM";
+	if (hour == 0) hour = 12;
+	else if (hour > 12) hour -= 12;
+	snprintf(out, size, "%02d:%02d:%02d %s", hour, tm->tm_min, tm->tm_sec, ampm);
 }
 
 void
@@ -2140,7 +2144,7 @@ updatestatus(void)
 {
 	char cpu_buf[128] = {0};
 	char mem_buf[32] = {0};
-	char time_buf[16] = {0};
+	char time_buf[32] = {0};
 	
 	get_cpu_usage(cpu_buf, sizeof(cpu_buf));
 	get_memory(mem_buf, sizeof(mem_buf));

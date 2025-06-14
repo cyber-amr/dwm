@@ -27,7 +27,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
+#include <sys/time.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <X11/cursorfont.h>
@@ -55,6 +57,8 @@
 #define HEIGHT(X)               ((X)->h + 2 * (X)->bw)
 #define TAGMASK                 ((1 << LENGTH(tags)) - 1)
 #define TEXTW(X)                (drw_fontset_getwidth(drw, (X)) + lrpad)
+#define MAX_CPUS 8
+#define STAT_LINE_LEN 256
 
 /* enums */
 enum { CurNormal, CurResize, CurMove, CurLast }; /* cursor */
@@ -140,6 +144,10 @@ typedef struct {
 	int isfloating;
 	int monitor;
 } Rule;
+
+typedef struct {
+    unsigned long long user, nice, system, idle, iowait, irq, softirq, steal;
+} cpu_stat;
 
 /* function declarations */
 static void applyrules(Client *c);
@@ -267,6 +275,9 @@ static Display *dpy;
 static Drw *drw;
 static Monitor *mons, *selmon;
 static Window root, wmcheckwin;
+static cpu_stat prev_stats[MAX_CPUS], curr_stats[MAX_CPUS];
+static int cpu_count = 0;
+static time_t last_cpu_read = 0;
 
 /* configuration, allows nested code to access above variables */
 #include "config.h"
@@ -275,6 +286,106 @@ static Window root, wmcheckwin;
 struct NumTags { char limitexceeded[LENGTH(tags) > 31 ? -1 : 1]; };
 
 /* function implementations */
+static inline int read_file(const char *path, char *dest, size_t size) {
+	FILE *f = fopen(path, "r");
+	if (!f) return -1;
+	size_t len = fread(dest, 1, size - 1, f);
+	dest[len] = '\0';
+	fclose(f);
+	return len;
+}
+
+static void get_memory(char *out, size_t size) {
+	FILE *f = fopen("/proc/meminfo", "r");
+	if (!f) return;
+	
+	unsigned long total = 0, avail = 0;
+	char buf[256];
+	while (fgets(buf, sizeof(buf), f)) {
+		if (strncmp(buf, "MemTotal:", 9) == 0)
+			sscanf(buf + 9, "%lu", &total);
+		else if (strncmp(buf, "MemAvailable:", 13) == 0)
+			sscanf(buf + 13, "%lu", &avail);
+	}
+	fclose(f);
+	
+	if (total && avail) {
+		unsigned int used_pct = ((total - avail) * 100) / total;
+		snprintf(out, size, "MEM:%s", bars[(used_pct * (sizeof(bars)/sizeof(*bars)-1)) / 100]);
+	}
+}
+
+static int read_cpu_stats(cpu_stat stats[], int max) {
+	FILE *f = fopen("/proc/stat", "r");
+	if (!f) return 0;
+	
+	int count = 0;
+	char buf[256];
+	while (fgets(buf, sizeof(buf), f)) {
+		if (strncmp(buf, "cpu", 3) != 0 || buf[3] == ' ') continue;
+		if (count >= max) break;
+		sscanf(buf, "cpu%d %llu %llu %llu %llu %llu %llu %llu %llu",
+			   &count, &stats[count].user, &stats[count].nice, &stats[count].system,
+			   &stats[count].idle, &stats[count].iowait, &stats[count].irq, 
+			   &stats[count].softirq, &stats[count].steal);
+		count++;
+	}
+	
+	fclose(f);
+	return count;
+}
+
+static void get_cpu_usage(char *out, size_t size) {
+	time_t now = time(NULL);
+	
+	/* Read current stats */
+	memcpy(prev_stats, curr_stats, sizeof(prev_stats));
+	cpu_count = read_cpu_stats(curr_stats, MAX_CPUS);
+	
+	/* Skip calculation on first run */
+	if (last_cpu_read == 0) {
+		last_cpu_read = now;
+		return;
+	}
+	
+	char *p = out;
+	size_t remaining = size;
+	int written = snprintf(p, remaining, "CPU:");
+	p += written;
+	remaining -= written;
+	
+	for (int i = 0; i < cpu_count && remaining > 0; i++) {
+		unsigned long long prev_idle = prev_stats[i].idle + prev_stats[i].iowait;
+		unsigned long long curr_idle = curr_stats[i].idle + curr_stats[i].iowait;
+		
+		unsigned long long prev_total = prev_stats[i].user + prev_stats[i].nice + 
+			prev_stats[i].system + prev_stats[i].idle + prev_stats[i].iowait + 
+			prev_stats[i].irq + prev_stats[i].softirq + prev_stats[i].steal;
+			
+		unsigned long long curr_total = curr_stats[i].user + curr_stats[i].nice + 
+			curr_stats[i].system + curr_stats[i].idle + curr_stats[i].iowait + 
+			curr_stats[i].irq + curr_stats[i].softirq + curr_stats[i].steal;
+		
+		unsigned long long total_diff = curr_total - prev_total;
+		unsigned long long idle_diff = curr_idle - prev_idle;
+		
+		if (total_diff == 0) total_diff = 1;
+		
+		unsigned int usage = (100 * (total_diff - idle_diff)) / total_diff;
+		written = snprintf(p, remaining, "%s", bars[(usage * (sizeof(bars)/sizeof(*bars)-1)) / 100]);
+		p += written;
+		remaining -= written;
+	}
+	
+	last_cpu_read = now;
+}
+
+static void get_datetime(char *out, size_t size) {
+	time_t t = time(NULL);
+	struct tm *tm = localtime(&t);
+	snprintf(out, size, "%02d:%02d", tm->tm_hour, tm->tm_min);
+}
+
 void
 applyrules(Client *c)
 {
@@ -1229,7 +1340,7 @@ propertynotify(XEvent *e)
 	XPropertyEvent *ev = &e->xproperty;
 
 	if ((ev->window == root) && (ev->atom == XA_WM_NAME))
-		updatestatus();
+		return; /* ignore */
 	else if (ev->state == PropertyDelete)
 		return; /* ignore */
 	else if ((c = wintoclient(ev->window))) {
@@ -1296,9 +1407,9 @@ resizeclient(Client *c, int x, int y, int w, int h)
 	c->oldh = c->h; c->h = wc.height = h;
 	wc.border_width = c->bw;
 	if (((nexttiled(c->mon->clients) == c && !nexttiled(c->next))
-	    || &monocle == c->mon->lt[c->mon->sellt]->arrange)
-	    && !c->isfullscreen && !c->isfloating
-	    && NULL != c->mon->lt[c->mon->sellt]->arrange) {
+		|| &monocle == c->mon->lt[c->mon->sellt]->arrange)
+		&& !c->isfullscreen && !c->isfloating
+		&& NULL != c->mon->lt[c->mon->sellt]->arrange) {
 		c->w = wc.width += c->bw * 2;
 		c->h = wc.height += c->bw * 2;
 		wc.border_width = 0;
@@ -1392,11 +1503,40 @@ void
 run(void)
 {
 	XEvent ev;
-	/* main event loop */
+	struct timeval tv, current_time, next_status_update;
+	struct timeval status_interval = {
+		.tv_sec = status_interval_ms / 1000,
+		.tv_usec = (status_interval_ms % 1000) * 1000
+	};
+	fd_set fds;
+	int xfd = ConnectionNumber(dpy);
+
 	XSync(dpy, False);
-	while (running && !XNextEvent(dpy, &ev))
-		if (handler[ev.type])
-			handler[ev.type](&ev); /* call handler */
+	
+	gettimeofday(&next_status_update, NULL);
+
+	while (running) {
+		gettimeofday(&current_time, NULL);
+		
+		if (timercmp(&current_time, &next_status_update, >=)) {
+			updatestatus();
+			timeradd(&current_time, &status_interval, &next_status_update);
+		}
+
+		/* Set up select with 100ms timeout */
+		FD_ZERO(&fds);
+		FD_SET(xfd, &fds);
+		tv.tv_sec = 0;
+		tv.tv_usec = 100000;
+
+		if (select(xfd + 1, &fds, NULL, NULL, &tv) > 0) {
+			while (XPending(dpy)) {
+				XNextEvent(dpy, &ev);
+				if (handler[ev.type])
+					handler[ev.type](&ev);
+			}
+		}
+	}
 }
 
 void
@@ -1998,8 +2138,15 @@ updatesizehints(Client *c)
 void
 updatestatus(void)
 {
-	if (!gettextprop(root, XA_WM_NAME, stext, sizeof(stext)))
-		strcpy(stext, "dwm-"VERSION);
+	char cpu_buf[128] = {0};
+	char mem_buf[32] = {0};
+	char time_buf[16] = {0};
+	
+	get_cpu_usage(cpu_buf, sizeof(cpu_buf));
+	get_memory(mem_buf, sizeof(mem_buf));
+	get_datetime(time_buf, sizeof(time_buf));
+	
+	snprintf(stext, sizeof(stext), "%s • %s • %s", cpu_buf, mem_buf, time_buf);
 	drawbar(selmon);
 }
 

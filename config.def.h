@@ -9,15 +9,16 @@ static const int status_interval_ms = 100;      /* milliseconds before status re
 static const char *bars[]           = { "▁","▂","▃","▄","▅","▆","▇","█" };
 static const char *fonts[]          = { "fixed:size=12" };
 static const char dmenufont[]       = "fixed:size=12";
-static const char col_gray1[]       = "#222222";
-static const char col_gray2[]       = "#444444";
-static const char col_gray3[]       = "#bbbbbb";
-static const char col_gray4[]       = "#eeeeee";
-static const char col_blue[]        = "#133666";
-static const char *colors[][3]      = {
-	/*               fg         bg         border   */
-	[SchemeNorm] = { col_gray3, col_gray1, col_gray2 },
-	[SchemeSel]  = { col_gray4, col_blue,  col_blue  },
+static const char col_bg[]      = "#0f0f11";  // deep void
+static const char col_fg[]      = "#d0d0d0";  // neutral soft gray
+static const char col_border[]  = "#1f1f2f";  // subtle edge
+static const char col_accent[]  = "#221144";  // mystic violet
+static const char col_accent2[] = "#1cacfc";  // crisp blue for contrast
+
+static const char *colors[][3]  = {
+	/*               fg        bg       border   */
+	[SchemeNorm] = { col_fg,   col_bg,  col_border },
+	[SchemeSel]  = { col_fg,   col_accent, col_accent2 },
 };
 
 /* tagging */
@@ -59,7 +60,7 @@ static const Layout layouts[] = {
 
 /* commands */
 static char dmenumon[2] = "0"; /* component of dmenucmd, manipulated in spawn() */
-static const char *dmenucmd[] = { "dmenu_run", "-m", dmenumon, "-fn", dmenufont, "-nb", col_gray1, "-nf", col_gray3, "-sb", col_blue, "-sf", col_gray4, NULL };
+static const char *dmenucmd[] = { "dmenu_run", "-m", dmenumon, "-fn", dmenufont, "-nb", col_bg, "-nf", col_fg, "-sb", col_accent, "-sf", col_fg, NULL };
 
 static const Key keys[] = {
 	/* modifier                     key        function        argument */

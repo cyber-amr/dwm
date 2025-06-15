@@ -2150,7 +2150,7 @@ updatestatus(void)
 	get_memory(mem_buf, sizeof(mem_buf));
 	get_datetime(time_buf, sizeof(time_buf));
 	
-	snprintf(stext, sizeof(stext), "%s • %s • %s", cpu_buf, mem_buf, time_buf);
+	snprintf(stext, sizeof(stext), " %s • %s • %s", cpu_buf, mem_buf, time_buf);
 	drawbar(selmon);
 }
 

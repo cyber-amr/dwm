@@ -149,6 +149,12 @@ typedef struct {
     unsigned long long user, nice, system, idle, iowait, irq, softirq, steal;
 } cpu_stat;
 
+typedef struct {
+	unsigned long long read_sectors;
+	unsigned long long write_sectors;
+	unsigned long long io_ticks;
+} disk_stat;
+
 /* function declarations */
 static void applyrules(Client *c);
 static int applysizehints(Client *c, int *x, int *y, int *w, int *h, int interact);
@@ -278,6 +284,8 @@ static Window root, wmcheckwin;
 static cpu_stat prev_stats[MAX_CPUS], curr_stats[MAX_CPUS];
 static int cpu_count = 0;
 static time_t last_cpu_read = 0;
+static disk_stat prev_disk_stat = {0};
+static disk_stat curr_disk_stat = {0};
 
 /* configuration, allows nested code to access above variables */
 #include "config.h"
@@ -293,6 +301,30 @@ static inline int read_file(const char *path, char *dest, size_t size) {
 	dest[len] = '\0';
 	fclose(f);
 	return len;
+}
+
+static int read_disk_stats(disk_stat *stat, const char *device) {
+	FILE *f = fopen("/proc/diskstats", "r");
+	if (!f) return -1;
+
+	char buf[256];
+	char dev_name[32];
+	int major, minor;
+	unsigned long long r_ios, r_merges, r_ticks, w_ios, w_merges, w_ticks, in_flight;
+
+	while (fgets(buf, sizeof(buf), f)) {
+		if (sscanf(buf, "%d %d %31s %llu %llu %llu %llu %llu %llu %llu %llu %llu %llu",
+				   &major, &minor, dev_name, &r_ios, &r_merges, &stat->read_sectors, &r_ticks,
+				   &w_ios, &w_merges, &stat->write_sectors, &w_ticks, &in_flight, &stat->io_ticks) == 13) {
+			if (strcmp(dev_name, device) == 0) {
+				fclose(f);
+				return 0;
+			}
+		}
+	}
+
+	fclose(f);
+	return -1;
 }
 
 static void get_memory(char *out, size_t size) {
@@ -378,6 +410,48 @@ static void get_cpu_usage(char *out, size_t size) {
 	}
 	
 	last_cpu_read = now;
+}
+
+static void get_disk_usage(char *out, size_t size, const char *device) {
+	struct timespec ts;
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	unsigned long long now_ms = ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+
+	static unsigned long long last_time_ms = 0;
+
+	prev_disk_stat = curr_disk_stat;
+	if (read_disk_stats(&curr_disk_stat, device) != 0) {
+		snprintf(out, size, "DISK:ERR");
+		return;
+	}
+
+	if (last_time_ms == 0) {
+		last_time_ms = now_ms;
+		snprintf(out, size, "DISK:---");
+		return;
+	}
+
+	unsigned long long time_diff_ms = now_ms - last_time_ms;
+	if (time_diff_ms == 0) time_diff_ms = 1;
+
+	/* io_ticks is in milliseconds */
+	unsigned long long io_ticks_diff = curr_disk_stat.io_ticks - prev_disk_stat.io_ticks;
+	unsigned int busy_pct = (io_ticks_diff * 100) / time_diff_ms;
+	if (busy_pct > 100) busy_pct = 100;
+
+	/* (sectors/sec * 512 bytes/sector) */
+	unsigned long long read_diff = curr_disk_stat.read_sectors - prev_disk_stat.read_sectors;
+	unsigned long long write_diff = curr_disk_stat.write_sectors - prev_disk_stat.write_sectors;
+
+	unsigned long read_speed = (read_diff * 512 * 1000) / time_diff_ms;  /* bytes/sec */
+	unsigned long write_speed = (write_diff * 512 * 1000) / time_diff_ms; /* bytes/sec */
+	unsigned long total_speed = (read_speed + write_speed); /* average bytes/sec */
+
+	snprintf(out, size, "DISK:%s %05.1fM",
+		bars[(busy_pct * (sizeof(bars)/sizeof(*bars)-1)) / 100],
+		(double)total_speed / (1024 * 1024));
+
+	last_time_ms = now_ms;
 }
 
 static void get_datetime(char *out, size_t size) {
@@ -2142,15 +2216,17 @@ updatesizehints(Client *c)
 void
 updatestatus(void)
 {
+	char disk_buf[32] = {0};
 	char cpu_buf[32] = {0};
 	char mem_buf[32] = {0};
 	char time_buf[32] = {0};
 	
+	get_disk_usage(disk_buf, sizeof(disk_buf), "sda");
 	get_cpu_usage(cpu_buf, sizeof(cpu_buf));
 	get_memory(mem_buf, sizeof(mem_buf));
 	get_datetime(time_buf, sizeof(time_buf));
 	
-	snprintf(stext, sizeof(stext), " %s • %s • %s", cpu_buf, mem_buf, time_buf);
+	snprintf(stext, sizeof(stext), " %s • %s • %s • %s", disk_buf, cpu_buf, mem_buf, time_buf);
 	drawbar(selmon);
 }
 

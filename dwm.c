@@ -2142,7 +2142,7 @@ updatesizehints(Client *c)
 void
 updatestatus(void)
 {
-	char cpu_buf[128] = {0};
+	char cpu_buf[32] = {0};
 	char mem_buf[32] = {0};
 	char time_buf[32] = {0};
 	

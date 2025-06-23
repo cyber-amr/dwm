@@ -286,6 +286,7 @@ static int cpu_count = 0;
 static time_t last_cpu_read = 0;
 static disk_stat prev_disk_stat = {0};
 static disk_stat curr_disk_stat = {0};
+static unsigned int cached_gpu_usage = 0, cached_mem_usage = 0;
 
 /* configuration, allows nested code to access above variables */
 #include "config.h"
@@ -325,6 +326,38 @@ static int read_disk_stats(disk_stat *stat, const char *device) {
 
 	fclose(f);
 	return -1;
+}
+
+static void get_nvidia_usage(char *out, size_t size) {
+    static struct timespec last_check = {0, 0};
+    struct timespec current_time;
+    clock_gettime(CLOCK_MONOTONIC, &current_time);
+
+    // Update only every 500ms
+    long elapsed_ms = (current_time.tv_sec - last_check.tv_sec) * 1000 +
+                      (current_time.tv_nsec - last_check.tv_nsec) / 1000000;
+
+    if (elapsed_ms > 500 || last_check.tv_sec == 0) {
+        char buf[128];
+        unsigned long mem_used = 0, mem_total = 0;
+
+        FILE *f = popen("nvidia-smi --query-gpu=utilization.gpu,memory.used,memory.total --format=csv,noheader,nounits", "r");
+        if (f) {
+            if (fgets(buf, sizeof(buf), f)) {
+                if (sscanf(buf, "%u, %lu, %lu", &cached_gpu_usage, &mem_used, &mem_total) == 3) {
+                    if (mem_total > 0) {
+                        cached_mem_usage = (mem_used * 100) / mem_total;
+                    }
+                }
+            }
+            pclose(f);
+        }
+        last_check = current_time;
+    }
+
+    snprintf(out, size, "GPU:%s:%s",
+             bars[(cached_gpu_usage * (sizeof(bars)/sizeof(*bars)-1)) / 100],
+             bars[(cached_mem_usage * (sizeof(bars)/sizeof(*bars)-1)) / 100]);
 }
 
 static void get_memory(char *out, size_t size) {
@@ -2219,14 +2252,16 @@ updatestatus(void)
 	char disk_buf[32] = {0};
 	char cpu_buf[32] = {0};
 	char mem_buf[32] = {0};
+	char gpu_buf[32] = {0};
 	char time_buf[32] = {0};
 	
 	get_disk_usage(disk_buf, sizeof(disk_buf), "sda");
 	get_cpu_usage(cpu_buf, sizeof(cpu_buf));
 	get_memory(mem_buf, sizeof(mem_buf));
+	get_nvidia_usage(gpu_buf, sizeof(gpu_buf));
 	get_datetime(time_buf, sizeof(time_buf));
 	
-	snprintf(stext, sizeof(stext), " %s • %s • %s • %s", disk_buf, cpu_buf, mem_buf, time_buf);
+	snprintf(stext, sizeof(stext), " %s • %s • %s • %s • %s", disk_buf, cpu_buf, mem_buf, gpu_buf, time_buf);
 	drawbar(selmon);
 }
 

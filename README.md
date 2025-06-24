@@ -57,6 +57,7 @@ The status bar displays:
 ### Mouse Actions
 | Action | Result |
 |--------|--------|
+| Left-click status bar | Show Date  |
 | Middle-click status bar | Launch dmenu |
 | Middle-click window title | Kill window |
 | Left-click layout symbol | Enable tiling |

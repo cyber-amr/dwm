@@ -101,6 +101,7 @@ static const Button buttons[] = {
 	{ ClkLtSymbol,          0,              Button3,        setlayout,      {.v = &layouts[0]} },
 	{ ClkWinTitle,          0,              Button2,        killclient,     {0} },
 	{ ClkStatusText,        0,              Button2,        spawn,          {.v = dmenucmd } },
+	{ ClkStatusText,        0,              Button1,        spawn,          SHCMD("notify-send \"$(date)\"") },
 	{ ClkClientWin,         MODKEY,         Button1,        movemouse,      {0} },
 	{ ClkClientWin,         MODKEY,         Button2,        togglefloating, {0} },
 	{ ClkClientWin,         MODKEY,         Button3,        resizemouse,    {0} },

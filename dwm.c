@@ -2261,7 +2261,7 @@ updatestatus(void)
 	get_nvidia_usage(gpu_buf, sizeof(gpu_buf));
 	get_datetime(time_buf, sizeof(time_buf));
 	
-	snprintf(stext, sizeof(stext), " %s • %s • %s • %s • %s", disk_buf, cpu_buf, mem_buf, gpu_buf, time_buf);
+	snprintf(stext, sizeof(stext), " %s • %s • %s • %s • %s", gpu_buf, cpu_buf, mem_buf, disk_buf, time_buf);
 	drawbar(selmon);
 }
 

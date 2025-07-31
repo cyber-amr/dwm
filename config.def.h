@@ -12,8 +12,8 @@ static const char dmenufont[]       = "fixed:size=12";
 static const char col_bg[]      = "#0f0f11";  // deep void
 static const char col_fg[]      = "#d0d0d0";  // neutral soft gray
 static const char col_border[]  = "#1f1f2f";  // subtle edge
-static const char col_accent[]  = "#221144";  // mystic violet
-static const char col_accent2[] = "#1cacfc";  // crisp blue for contrast
+static const char col_accent[]  = "#202030";  // royal deep gray
+static const char col_accent2[] = "#8c5cfc";  // mystic violet for contrast
 
 static const char *colors[][3]  = {
 	/*               fg        bg       border   */

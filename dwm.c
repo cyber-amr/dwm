@@ -414,7 +414,7 @@ static void get_cpu_usage(char *out, size_t size) {
 
 static void get_disk_usage(char *out, size_t size, const char *device) {
 	struct timespec ts;
-	clock_gettime(CLOCK_MONOTONIC, &ts);
+	clock_gettime(CLOCK_MONOTONIC_COARSE, &ts);
 	unsigned long long now_ms = ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
 
 	static unsigned long long last_time_ms = 0;

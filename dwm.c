@@ -286,7 +286,6 @@ static int cpu_count = 0;
 static time_t last_cpu_read = 0;
 static disk_stat prev_disk_stat = {0};
 static disk_stat curr_disk_stat = {0};
-static unsigned int cached_gpu_usage = 0, cached_mem_usage = 0;
 
 /* configuration, allows nested code to access above variables */
 #include "config.h"
@@ -2220,7 +2219,6 @@ updatestatus(void)
 	char disk_buf[32] = {0};
 	char cpu_buf[32] = {0};
 	char mem_buf[32] = {0};
-	char gpu_buf[32] = {0};
 	char time_buf[32] = {0};
 	
 	get_disk_usage(disk_buf, sizeof(disk_buf), "sda");
@@ -2228,7 +2226,7 @@ updatestatus(void)
 	get_memory(mem_buf, sizeof(mem_buf));
 	get_datetime(time_buf, sizeof(time_buf));
 	
-	snprintf(stext, sizeof(stext), " %s • %s • %s • %s • %s", gpu_buf, cpu_buf, mem_buf, disk_buf, time_buf);
+	snprintf(stext, sizeof(stext), " %s • %s • %s • %s", cpu_buf, mem_buf, disk_buf, time_buf);
 	drawbar(selmon);
 }
 

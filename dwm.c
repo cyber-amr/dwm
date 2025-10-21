@@ -327,6 +327,16 @@ static int read_disk_stats(disk_stat *stat, const char *device) {
 	return -1;
 }
 
+static void get_battery(char *out, size_t size) {
+    char capacity[8];
+    if (read_file("/sys/class/power_supply/BAT1/capacity", capacity, sizeof(capacity)) < 0) {
+        snprintf(out, size, "BAT:ERR");
+        return;
+    }
+    int cap = atoi(capacity);
+    snprintf(out, size, "BAT:%s", bars[(cap * (sizeof(bars)/sizeof(*bars)-1)) / 100]);
+}
+
 static void get_memory(char *out, size_t size) {
 	FILE *f = fopen("/proc/meminfo", "r");
 	if (!f) return;
@@ -2219,14 +2229,16 @@ updatestatus(void)
 	char disk_buf[32] = {0};
 	char cpu_buf[32] = {0};
 	char mem_buf[32] = {0};
+	char bat_buf[32] = {0};
 	char time_buf[32] = {0};
 	
 	get_disk_usage(disk_buf, sizeof(disk_buf), "nvme0n1");
 	get_cpu_usage(cpu_buf, sizeof(cpu_buf));
 	get_memory(mem_buf, sizeof(mem_buf));
+	get_battery(bat_buf, sizeof(bat_buf));
 	get_datetime(time_buf, sizeof(time_buf));
 	
-	snprintf(stext, sizeof(stext), " %s • %s • %s • %s", cpu_buf, mem_buf, disk_buf, time_buf);
+	snprintf(stext, sizeof(stext), " %s • %s • %s • %s • %s", cpu_buf, mem_buf, disk_buf, bat_buf, time_buf);
 	drawbar(selmon);
 }
 

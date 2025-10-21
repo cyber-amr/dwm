@@ -2221,7 +2221,7 @@ updatestatus(void)
 	char mem_buf[32] = {0};
 	char time_buf[32] = {0};
 	
-	get_disk_usage(disk_buf, sizeof(disk_buf), "sda");
+	get_disk_usage(disk_buf, sizeof(disk_buf), "nvme0n1");
 	get_cpu_usage(cpu_buf, sizeof(cpu_buf));
 	get_memory(mem_buf, sizeof(mem_buf));
 	get_datetime(time_buf, sizeof(time_buf));

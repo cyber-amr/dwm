@@ -329,12 +329,26 @@ static int read_disk_stats(disk_stat *stat, const char *device) {
 
 static void get_battery(char *out, size_t size) {
     char capacity[8];
+    char status[16];
+    int is_charging = 0;
+
     if (read_file("/sys/class/power_supply/BAT1/capacity", capacity, sizeof(capacity)) < 0) {
         snprintf(out, size, "BAT:ERR");
         return;
     }
+
+    if (read_file("/sys/class/power_supply/BAT1/status", status, sizeof(status)) >= 0) {
+        if (strncmp(status, "Charging", 8) == 0) {
+            is_charging = 1;
+        }
+    }
+
     int cap = atoi(capacity);
-    snprintf(out, size, "BAT:%s", bars[(cap * (sizeof(bars)/sizeof(*bars)-1)) / 100]);
+    if (is_charging) {
+        snprintf(out, size, "BAT:%s ⚡︎", bars[(cap * (sizeof(bars)/sizeof(*bars)-1)) / 100]);
+    } else {
+        snprintf(out, size, "BAT:%s", bars[(cap * (sizeof(bars)/sizeof(*bars)-1)) / 100]);
+    }
 }
 
 static void get_memory(char *out, size_t size) {

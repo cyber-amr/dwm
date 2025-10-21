@@ -286,6 +286,7 @@ static int cpu_count = 0;
 static time_t last_cpu_read = 0;
 static disk_stat prev_disk_stat = {0};
 static disk_stat curr_disk_stat = {0};
+static time_t last_activity_time = 0;
 
 /* configuration, allows nested code to access above variables */
 #include "config.h"
@@ -633,6 +634,7 @@ attachstack(Client *c)
 void
 buttonpress(XEvent *e)
 {
+	last_activity_time = time(NULL);
 	unsigned int i, x, click;
 	Arg arg = {0};
 	Client *c;
@@ -1213,6 +1215,7 @@ isuniquegeom(XineramaScreenInfo *unique, size_t n, XineramaScreenInfo *info)
 void
 keypress(XEvent *e)
 {
+	last_activity_time = time(NULL); /* Update activity timestamp for all keypresses */
 	unsigned int i;
 	KeySym keysym;
 	XKeyEvent *ev;
@@ -1286,7 +1289,7 @@ manage(Window w, XWindowAttributes *wa)
 		c->x = c->mon->mx + (c->mon->mw - WIDTH(c)) / 2;
 		c->y = c->mon->my + (c->mon->mh - HEIGHT(c)) / 2;
 	}
-	XSelectInput(dpy, w, EnterWindowMask|FocusChangeMask|PropertyChangeMask|StructureNotifyMask);
+	XSelectInput(dpy, w, EnterWindowMask|FocusChangeMask|PropertyChangeMask|StructureNotifyMask|KeyPressMask);
 	grabbuttons(c, 0);
 	if (!c->isfloating)
 		c->isfloating = c->oldstate = trans != None || c->isfixed;
@@ -1346,6 +1349,7 @@ monocle(Monitor *m)
 void
 motionnotify(XEvent *e)
 {
+	last_activity_time = time(NULL);
 	static Monitor *mon = NULL;
 	Monitor *m;
 	XMotionEvent *ev = &e->xmotion;
@@ -1606,20 +1610,41 @@ run(void)
 {
 	XEvent ev;
 	struct timeval tv, current_time, next_status_update;
-	struct timeval status_interval = {
-		.tv_sec = status_interval_ms / 1000,
-		.tv_usec = (status_interval_ms % 1000) * 1000
-	};
 	fd_set fds;
 	int xfd = ConnectionNumber(dpy);
+	long current_status_interval_ms = active_status_interval_ms;
+	time_t prev_activity_time = 0;
 
 	XSync(dpy, False);
 	
+	last_activity_time = time(NULL);
 	gettimeofday(&next_status_update, NULL);
 
 	while (running) {
 		gettimeofday(&current_time, NULL);
-		
+
+		time_t current_time_sec = time(NULL);
+		long idle_time_ms = (current_time_sec - last_activity_time) * 1000;
+
+		if (idle_time_ms >= idle_threshold_ms) {
+			current_status_interval_ms = idle_status_interval_ms;
+		} else {
+			current_status_interval_ms = active_status_interval_ms;
+			if (last_activity_time != prev_activity_time) {
+				struct timeval fast_interval = {
+					.tv_sec = active_status_interval_ms / 1000,
+					.tv_usec = (active_status_interval_ms % 1000) * 1000
+				};
+				timeradd(&current_time, &fast_interval, &next_status_update);
+				prev_activity_time = last_activity_time;
+			}
+		}
+
+		struct timeval status_interval = {
+			.tv_sec = current_status_interval_ms / 1000,
+			.tv_usec = (current_status_interval_ms % 1000) * 1000
+		};
+
 		if (timercmp(&current_time, &next_status_update, >=)) {
 			updatestatus();
 			timeradd(&current_time, &status_interval, &next_status_update);

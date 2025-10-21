@@ -5,7 +5,9 @@ static const unsigned int borderpx  = 1;        /* border pixel of windows */
 static const unsigned int snap      = 16;       /* snap pixel */
 static const int showbar            = 1;        /* 0 means no bar */
 static const int topbar             = 0;        /* 0 means bottom bar */
-static const int status_interval_ms = 5000;      /* milliseconds before status refresh */
+static const int idle_threshold_ms = 6900; /* milliseconds before entering idle mode */
+static const int active_status_interval_ms = 100; /* milliseconds to status refresh when active */
+static const int idle_status_interval_ms = 30000; /* milliseconds to status refresh when idle */
 static const char *bars[]           = { "▁","▂","▃","▄","▅","▆","▇","█" };
 static const char *fonts[]          = { "fixed:size=12" };
 static const char dmenufont[]       = "fixed:size=12";
